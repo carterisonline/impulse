@@ -1,0 +1,18 @@
+[package]
+authors = ["Carter Reeb <reebcw@pm.me>"]
+edition = "2018"
+name = "impulse-editor"
+version = "0.1.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+cpal = "0.13"
+hound = "3.4"
+iced = "0.3"
+iced_graphics = "0.2"
+iced_native = "0.4"
+
+[dependencies.dasp]
+features = ["all"]
+version = "0.11"
