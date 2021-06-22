@@ -5,7 +5,7 @@ use iced_graphics::{
 use iced_native::{
     layout, mouse, Element, Hasher, Layout, Length, Point, Rectangle, Size, Vector, Widget,
 };
-use std::sync::mpsc::{self, channel, Receiver, Sender};
+use std::sync::mpsc::Sender;
 
 use dasp::Sample;
 

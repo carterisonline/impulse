@@ -6,6 +6,7 @@ use iced::{
 use impulse_editor::style;
 use impulse_editor::widgets::spectrogram::BufferSize;
 use impulse_editor::widgets::Spectrogram;
+use native_dialog::FileDialog;
 use std::sync::mpsc::{self, Receiver, Sender};
 
 struct Channel<'a, T> {
@@ -39,6 +40,7 @@ struct State<'a, T> {
     pause_button: button::State,
     spectrogram_display_scroll: scrollable::State,
     add_new_channel_button: button::State,
+    import_audio_button: button::State,
     spectrograms: Vec<Spectrogram<'a, T>>,
     channels: Vec<Channel<'a, T>>,
 }
@@ -50,6 +52,7 @@ enum Message {
     PlayButtonPressed,
     PauseButtonPressed,
     AddNewChannelButtonPressed,
+    ImportAudioButtonPressed,
 }
 
 // The app itself
@@ -78,6 +81,27 @@ where
                 self.spectrograms.push(Spectrogram::<T>::new(
                     self.channels[self.channels.len() - 1].assign_sender(),
                 ))
+            }
+            Message::ImportAudioButtonPressed => {
+                let channel_out = Channel::<T>::new();
+
+                let file = FileDialog::new()
+                    .set_location("~")
+                    .add_filter("FLAC Audio File", &["flac"])
+                    .add_filter("MPEG-3 Audio File", &["mp3"])
+                    .add_filter("Ogg-Vorbis Audio File", &["ogg"])
+                    .add_filter("WAV Audio File", &["wav"])
+                    .show_open_single_file()
+                    .unwrap();
+
+                if file.is_some() {
+                    println!("Opening from {:?}", file.unwrap());
+
+                    self.channels.push(channel_out);
+                    self.spectrograms.push(Spectrogram::<T>::new(
+                        self.channels[self.channels.len() - 1].assign_sender(),
+                    ))
+                }
             }
         }
     }
@@ -116,6 +140,12 @@ where
         .padding(10)
         .on_press(Message::AddNewChannelButtonPressed)
         .style(self.theme);
+
+        let import_audio_button =
+            Button::new(&mut self.import_audio_button, Text::new("Import audio"))
+                .padding(10)
+                .on_press(Message::ImportAudioButtonPressed)
+                .style(self.theme);
 
         let sidebar = Scrollable::new(&mut self.sidebar_scroll)
             .style(self.theme)
@@ -163,7 +193,8 @@ where
                     .align_items(Align::Center)
                     .push(audio_playing_label)
                     .push(Rule::vertical(0).style(self.theme))
-                    .push(add_new_channel_button),
+                    .push(add_new_channel_button)
+                    .push(import_audio_button),
             )
             .push(Rule::horizontal(38).style(self.theme))
             .push(
