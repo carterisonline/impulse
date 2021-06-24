@@ -8,13 +8,15 @@ use impulse_editor::widgets::spectrogram::BufferSize;
 use impulse_editor::widgets::Spectrogram;
 use native_dialog::FileDialog;
 use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::Arc;
+use std::sync::Mutex;
 
-struct Channel<'a, T> {
-    samples: Vec<&'a T>,
-    channel: (Sender<T>, Receiver<T>),
+struct Channel<T> {
+    samples: Arc<Mutex<Vec<T>>>,
+    channel: (Sender<Arc<Mutex<Vec<T>>>>, Receiver<Arc<Mutex<Vec<T>>>>),
 }
 
-impl<'a, T> Channel<'a, T>
+impl<T> Channel<T>
 where
     T: Sample,
     T: Default,
@@ -22,17 +24,17 @@ where
     fn new() -> Self {
         Self {
             channel: mpsc::channel(),
-            samples: vec![],
+            samples: Arc::new(Mutex::new(vec![])),
         }
     }
-    fn assign_sender(&self) -> Sender<T> {
+    fn assign_sender(&self) -> Sender<Arc<Mutex<Vec<T>>>> {
         self.channel.0.clone()
     }
 }
 
 // The App's state, which contains values that the program uses.
 #[derive(Default)]
-struct State<'a, T> {
+struct State<T> {
     audio_playing: bool,
     theme: style::Theme,
     sidebar_scroll: scrollable::State,
@@ -41,8 +43,8 @@ struct State<'a, T> {
     spectrogram_display_scroll: scrollable::State,
     add_new_channel_button: button::State,
     import_audio_button: button::State,
-    spectrograms: Vec<Spectrogram<'a, T>>,
-    channels: Vec<Channel<'a, T>>,
+    spectrograms: Vec<Spectrogram<T>>,
+    channels: Vec<Channel<T>>,
 }
 
 // The Events that the program will send and recieve to change values in the state.
@@ -56,10 +58,11 @@ enum Message {
 }
 
 // The app itself
-impl<'a, T> Sandbox for State<'a, T>
+impl<T> Sandbox for State<T>
 where
     T: Sample,
     T: Default,
+    T: hound::Sample,
 {
     type Message = Message;
     fn new() -> Self {
@@ -95,12 +98,37 @@ where
                     .unwrap();
 
                 if file.is_some() {
-                    println!("Opening from {:?}", file.unwrap());
+                    let file_out = file.unwrap();
+                    let samples = match file_out.extension().unwrap().to_str().unwrap() {
+                        "wav" => {
+                            let reader = hound::WavReader::open(file_out.clone()).unwrap();
+                            reader.into_samples::<T>().filter_map(Result::ok)
+                        }
+                        _ => unimplemented!(),
+                    }
+                    .collect::<Vec<T>>();
+                    println!("Opening from {:?}", &file_out);
 
                     self.channels.push(channel_out);
-                    self.spectrograms.push(Spectrogram::<T>::new(
+
+                    let mut spectrogram_out = Spectrogram::<T>::new(
                         self.channels[self.channels.len() - 1].assign_sender(),
-                    ))
+                    );
+
+                    for t in samples {
+                        self.channels[self.channels.len() - 1]
+                            .samples
+                            .lock()
+                            .unwrap()
+                            .push(t);
+                    }
+
+                    spectrogram_out.load(
+                        self.channels[self.channels.len() - 1].samples.clone(),
+                        BufferSize::All,
+                    );
+
+                    self.spectrograms.push(spectrogram_out)
                 }
             }
         }
@@ -157,7 +185,8 @@ where
                     .push(choose_theme),
             );
 
-        let samples_clone: Vec<Vec<&T>> = self.channels.iter().map(|c| c.samples.clone()).collect();
+        let samples_clone: Vec<Arc<Mutex<Vec<T>>>> =
+            self.channels.iter().map(|c| c.samples.clone()).collect();
 
         let col: Element<_> = self
             .spectrograms
@@ -180,7 +209,6 @@ where
         } else {
             "No audio playing"
         });
-
         let content = Column::new()
             .padding(10)
             .push(

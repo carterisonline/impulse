@@ -5,7 +5,7 @@ use iced_graphics::{
 use iced_native::{
     layout, mouse, Element, Hasher, Layout, Length, Point, Rectangle, Size, Vector, Widget,
 };
-use std::sync::mpsc::Sender;
+use std::sync::{mpsc::Sender, Arc, Mutex};
 
 use dasp::Sample;
 
@@ -15,34 +15,39 @@ pub enum BufferSize {
 }
 
 #[derive(Clone)]
-pub struct Spectrogram<'a, T> {
-    samples: Vec<&'a T>,
-    sender: Sender<T>,
+pub struct Spectrogram<T> {
+    samples: Arc<Mutex<Vec<T>>>,
+    sender: Sender<Arc<Mutex<Vec<T>>>>,
 }
 
-impl<'a, T> Spectrogram<'a, T>
+impl<T> Spectrogram<T>
 where
     T: Sample,
 {
-    pub fn default(sender: Sender<T>) -> Self {
+    pub fn default(sender: Sender<Arc<Mutex<Vec<T>>>>) -> Self {
         Self {
-            samples: vec![],
+            samples: Arc::new(Mutex::new(vec![])),
             sender,
         }
     }
-    pub fn new(sender: Sender<T>) -> Self {
+    pub fn new(sender: Sender<Arc<Mutex<Vec<T>>>>) -> Self {
         Self::default(sender)
     }
-    pub fn load(&mut self, samples: Vec<&'a T>, buffersize: BufferSize) {
+    pub fn load(&mut self, samples: Arc<Mutex<Vec<T>>>, buffersize: BufferSize) {
         match buffersize {
             BufferSize::All => self.samples = samples,
-            _ => self.samples = samples,
+            _ => (),
         }
     }
-    pub fn post(&self, buffersize: BufferSize) {}
+    pub fn post(&self, buffersize: BufferSize) {
+        match buffersize {
+            BufferSize::All => self.sender.send(self.samples.clone()).unwrap(),
+            _ => (),
+        }
+    }
 }
 
-impl<'a, Message, B, T> Widget<Message, Renderer<B>> for Spectrogram<'a, T>
+impl<Message, B, T> Widget<Message, Renderer<B>> for Spectrogram<T>
 where
     B: Backend,
     T: Sample,
@@ -161,7 +166,7 @@ where
     }
 }
 
-impl<'a, Message, B, T> Into<Element<'a, Message, Renderer<B>>> for Spectrogram<'a, T>
+impl<'a, Message, B, T: 'a> Into<Element<'a, Message, Renderer<B>>> for Spectrogram<T>
 where
     B: Backend,
     T: Sample,
